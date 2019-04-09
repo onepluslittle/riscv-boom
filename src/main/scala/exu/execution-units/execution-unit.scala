@@ -123,25 +123,26 @@ class ExecutionUnitIO(
  * @param has_ifpu does the exe unit have a int to FP unit
  * @param has_fpiu does the exe unit have a FP to int unit
  */
-abstract class ExecutionUnit( val reads_irf     : Boolean       = false,
-                              val writes_irf    : Boolean       = false,
-                              val reads_frf     : Boolean       = false,
-                              val writes_frf    : Boolean       = false,
-                              val writes_ll_irf : Boolean       = false,
-                              val writes_ll_frf : Boolean       = false,
+abstract class ExecutionUnit( val reads_irf        : Boolean       = false,
+                              val writes_irf       : Boolean       = false,
+                              val reads_frf        : Boolean       = false,
+                              val writes_frf       : Boolean       = false,
+                              val writes_ll_irf    : Boolean       = false,
+                              val writes_ll_frf    : Boolean       = false,
                               val num_bypass_stages: Int,
-                              val data_width    : Int,
-                              val bypassable    : Boolean       = false, // TODO make override def for code clarity
-                              val has_mem       : Boolean       = false,
-                              val uses_csr_wport: Boolean       = false,
-                              val has_br_unit   : Boolean       = false,
-                              val has_alu       : Boolean       = false,
-                              val has_fpu       : Boolean       = false,
-                              val has_mul       : Boolean       = false,
-                              val has_div       : Boolean       = false,
-                              val has_fdiv      : Boolean       = false,
-                              val has_ifpu      : Boolean       = false,
-                              val has_fpiu      : Boolean       = false
+                              val data_width       : Int,
+                              val bypassable       : Boolean       = false, // TODO make override def for code clarity
+                              val always_bypassable: Boolean       = false,
+                              val has_mem          : Boolean       = false,
+                              val uses_csr_wport   : Boolean       = false,
+                              val has_br_unit      : Boolean       = false,
+                              val has_alu          : Boolean       = false,
+                              val has_fpu          : Boolean       = false,
+                              val has_mul          : Boolean       = false,
+                              val has_div          : Boolean       = false,
+                              val has_fdiv         : Boolean       = false,
+                              val has_ifpu         : Boolean       = false,
+                              val has_fpiu         : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new ExecutionUnitIO(writes_irf, writes_ll_irf, writes_frf, writes_ll_frf,
@@ -157,6 +158,9 @@ abstract class ExecutionUnit( val reads_irf     : Boolean       = false,
 
    require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || has_mem || has_ifpu),
       "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
+
+   require (bypassable || !always_bypassable,
+      "[execute] an execution unit must be bypassable if it is always bypassable")
 
    def supportedFuncUnits =
    {
@@ -194,23 +198,24 @@ class ALUExeUnit(
    has_mem         : Boolean = false)
    (implicit p: Parameters)
    extends ExecutionUnit(
-      reads_irf  = true,
-      writes_irf = has_alu || has_mul || has_div,
-      writes_ll_irf = has_mem,
-      writes_ll_frf = (has_ifpu || has_mem)
+      reads_irf         = true,
+      writes_irf        = has_alu || has_mul || has_div,
+      writes_ll_irf     = has_mem,
+      writes_ll_frf     = (has_ifpu || has_mem)
          && p(tile.TileKey).core.fpu != None,
       num_bypass_stages =
          if (has_alu && has_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
          else if (has_alu) 1 else 0,
-      data_width     = p(tile.XLen) + 1,
-      bypassable     = has_alu,
-      uses_csr_wport = shares_csr_wport,
-      has_br_unit    = has_br_unit,
-      has_alu        = has_alu,
-      has_mul        = has_mul,
-      has_div        = has_div,
-      has_ifpu       = has_ifpu,
-      has_mem        = has_mem)(p)
+      data_width        = p(tile.XLen) + 1,
+      bypassable        = has_alu,
+      always_bypassable = has_alu && !has_mul && !has_div,
+      uses_csr_wport    = shares_csr_wport,
+      has_br_unit       = has_br_unit,
+      has_alu           = has_alu,
+      has_mul           = has_mul,
+      has_div           = has_div,
+      has_ifpu          = has_ifpu,
+      has_mem           = has_mem)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    require(!(has_mem && has_ifpu),
